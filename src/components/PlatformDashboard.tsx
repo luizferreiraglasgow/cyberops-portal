@@ -52,29 +52,15 @@ const redTeamTools: Tool[] = [
     external: false,
   },
   {
-    name: "Metasploit",
-    description: "Exploitation framework — launch via Guacamole terminal",
-    url: "https://guac.cyberopsplatform.co.uk",
-    badge: "node-01",
-    external: true,
-  },
-  {
     name: "Nmap / Recon",
-    description: "Network scanner — MCP-powered via Claude",
-    url: "https://mcp.cyberopsplatform.co.uk",
-    badge: "MCP",
-    external: true,
+    description: "Network scanner + recon",
+    url: "/dashboard",
+    badge: "Dashboard",
+    external: false,
   },
 ];
 
 const blueTeamTools: Tool[] = [
-  {
-    name: "Wazuh SIEM",
-    description: "Security monitoring, alerts, and compliance",
-    url: "http://10.1.0.13:5601",
-    badge: "prod :5601",
-    external: false,
-  },
   {
     name: "MISP",
     description: "Threat intelligence platform",
@@ -98,24 +84,24 @@ const blueTeamTools: Tool[] = [
   },
   {
     name: "VirusTotal",
-    description: "File / URL / hash analysis — MCP-powered",
-    url: "https://mcp.cyberopsplatform.co.uk",
-    badge: "MCP",
-    external: true,
+    description: "File / URL / hash analysis",
+    url: "/dashboard",
+    badge: "Dashboard",
+    external: false,
   },
   {
     name: "AbuseIPDB",
-    description: "IP reputation lookup — MCP-powered",
-    url: "https://mcp.cyberopsplatform.co.uk",
-    badge: "MCP",
-    external: true,
+    description: "IP reputation lookup",
+    url: "/dashboard",
+    badge: "Dashboard",
+    external: false,
   },
   {
     name: "Shodan",
-    description: "Internet asset discovery — MCP-powered",
-    url: "https://mcp.cyberopsplatform.co.uk",
-    badge: "MCP",
-    external: true,
+    description: "Internet asset discovery",
+    url: "/dashboard",
+    badge: "Dashboard",
+    external: false,
   },
 ];
 
@@ -161,16 +147,9 @@ const utilityTools: Tool[] = [
   {
     name: "CyberChef",
     description: "Data encoding, decoding, and analysis Swiss Army knife",
-    url: "http://192.168.0.57:8000",
-    badge: "node-01 :8000",
-    external: false,
-  },
-  {
-    name: "DVWA",
-    description: "Damn Vulnerable Web App — practice target",
-    url: "http://192.168.0.57:8001",
-    badge: "node-01 :8001",
-    external: false,
+    url: "https://gchq.github.io/CyberChef/",
+    badge: "web",
+    external: true,
   },
 ];
 
@@ -268,7 +247,6 @@ export function PlatformDashboard() {
             { label: "node-00", ip: "192.168.0.68", role: "RPi4 · Gateway", color: "text-green-400" },
             { label: "node-01", ip: "192.168.0.57", role: "HP ProBook · Red Team", color: "text-red-400" },
             { label: "node-02", ip: "192.168.0.66", role: "ASUS · Blue Team", color: "text-blue-400" },
-            { label: "wazuh", ip: "10.1.0.13", role: "Prod SIEM", color: "text-yellow-400" },
           ].map((node) => (
             <div key={node.label} className="flex items-center gap-2 text-slate-500">
               <span className={`status-dot w-1.5 h-1.5 rounded-full inline-block ${node.color.replace("text-", "bg-")}`} />

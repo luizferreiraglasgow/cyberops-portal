@@ -5,6 +5,23 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { Navbar } from '@/components/Navbar'
 
+const GATEWAY = 'https://mcp.cyberopsplatform.co.uk'
+
+function parseNmap(xml: string): string {
+  if (!xml) return ''
+  const hostUp = /<status state="up"/.test(xml)
+  const ports = Array.from(xml.matchAll(/<port protocol="(\w+)" portid="(\d+)"><state state="open"[^>]*\/>(?:<service ([^>]*?)\/?>)?/g))
+  const lines = ports.map(m => {
+    const attrs = m[3] || ''
+    const name = /name="([^"]*)"/.exec(attrs)?.[1] || ''
+    const product = /product="([^"]*)"/.exec(attrs)?.[1] || ''
+    const version = /version="([^"]*)"/.exec(attrs)?.[1] || ''
+    return `${m[2]}/${m[1]}  open  ${[name, product, version].filter(Boolean).join(' ')}`.trim()
+  })
+  if (!hostUp) return 'Host down / no response.'
+  return lines.length ? lines.join('\n') : 'Host up — no open ports in the scanned range.'
+}
+
 function ResultBox({ label, data, loading, error }: {
   label: string
   data: unknown
@@ -143,6 +160,87 @@ function ShodanPanel() {
   )
 }
 
+function NmapPanel() {
+  const [target, setTarget] = useState('')
+  const [ports, setPorts] = useState('1-1000')
+  const [loading, setLoading] = useState(false)
+  const [out, setOut] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  async function run() {
+    if (!target.trim()) return
+    setLoading(true); setOut(null); setError(null)
+    try {
+      const res = await fetch(`${GATEWAY}/mcp/nmap`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: target.trim(), ports: ports.trim() || '1-1000', scan_type: '-sV' }),
+      })
+      if (res.status === 401) { setError('Gateway requires an auth token for nmap (MCP_AUTH_TOKEN is set). Unset it on the gateway to enable this panel.'); return }
+      const json = await res.json()
+      if (json.raw_xml !== undefined) setOut(parseNmap(json.raw_xml) || json.stderr || 'No output')
+      else setError(json.error ?? json.detail ?? 'Gateway error')
+    } catch { setError('Could not reach the MCP gateway') } finally { setLoading(false) }
+  }
+  return (
+    <div className="cyber-card p-6">
+      <div className="flex items-center gap-3 mb-4">
+        <span style={{ fontSize: '1.5rem' }}>📡</span>
+        <div>
+          <h2 className="font-semibold" style={{ color: '#00d4ff' }}>Nmap</h2>
+          <p className="text-xs" style={{ color: '#64748b' }}>Port scan via MCP gateway</p>
+        </div>
+      </div>
+      <div className="flex gap-2 mb-2">
+        <input className="cyber-input" placeholder="target (IP / host)" value={target} onChange={e => setTarget(e.target.value)} onKeyDown={e => e.key === 'Enter' && run()} />
+      </div>
+      <div className="flex gap-2">
+        <input className="cyber-input" placeholder="ports (e.g. 1-1000)" value={ports} onChange={e => setPorts(e.target.value)} style={{ maxWidth: 160 }} />
+        <button className="cyber-btn whitespace-nowrap" onClick={run} disabled={loading}>Scan</button>
+      </div>
+      <ResultBox label="Result" data={out} loading={loading} error={error} />
+    </div>
+  )
+}
+
+function StrixPanel() {
+  const [target, setTarget] = useState('')
+  const [flags, setFlags] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [out, setOut] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  async function run() {
+    if (!target.trim()) return
+    setLoading(true); setOut(null); setError(null)
+    try {
+      const res = await fetch(`${GATEWAY}/mcp/strix`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: target.trim(), flags: flags.trim() }),
+      })
+      const json = await res.json()
+      if (json.status === 'error' && !json.stdout) setError(json.stderr || json.error || 'STRIX failed on node-02')
+      else setOut(json.stdout || json.stderr || 'No output')
+    } catch { setError('Could not reach the MCP gateway') } finally { setLoading(false) }
+  }
+  return (
+    <div className="cyber-card p-6">
+      <div className="flex items-center gap-3 mb-4">
+        <span style={{ fontSize: '1.5rem' }}>🤖</span>
+        <div>
+          <h2 className="font-semibold" style={{ color: '#00d4ff' }}>STRIX</h2>
+          <p className="text-xs" style={{ color: '#64748b' }}>AI pentest agent — node-02 (can take minutes)</p>
+        </div>
+      </div>
+      <div className="flex gap-2 mb-2">
+        <input className="cyber-input" placeholder="target (URL / path)" value={target} onChange={e => setTarget(e.target.value)} onKeyDown={e => e.key === 'Enter' && run()} />
+      </div>
+      <div className="flex gap-2">
+        <input className="cyber-input" placeholder="flags (optional)" value={flags} onChange={e => setFlags(e.target.value)} style={{ maxWidth: 200 }} />
+        <button className="cyber-btn whitespace-nowrap" onClick={run} disabled={loading}>Run</button>
+      </div>
+      <ResultBox label="Output" data={out} loading={loading} error={error} />
+    </div>
+  )
+}
+
 export default function DashboardPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
@@ -155,12 +253,14 @@ export default function DashboardPage() {
       <main className="max-w-7xl mx-auto px-4 py-10">
         <div className="mb-8">
           <h1 className="text-2xl font-bold mb-1" style={{ color: '#e2e8f0', fontFamily: 'monospace' }}>Security Dashboard</h1>
-          <p style={{ color: '#64748b', fontSize: '0.875rem' }}>Real-time threat intelligence — AbuseIPDB · VirusTotal · Shodan</p>
+          <p style={{ color: '#64748b', fontSize: '0.875rem' }}>Threat intel & live scanning — AbuseIPDB · VirusTotal · Shodan · Nmap · STRIX</p>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <AbuseIPDBPanel />
           <VirusTotalPanel />
           <ShodanPanel />
+          <NmapPanel />
+          <StrixPanel />
         </div>
       </main>
     </>

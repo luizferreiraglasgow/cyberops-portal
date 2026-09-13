@@ -269,6 +269,19 @@ const priorityConfig = {
   low: { color: '#22c55e', bg: '#14532d', label: 'LOW' },
 }
 
+function renderMarkdown(text: string): string {
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/^### (.+)$/gm, '<h3 style="color:#e2e8f0;font-size:0.8rem;margin:12px 0 4px;text-transform:uppercase;letter-spacing:0.04em">$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2 style="color:#00d4ff;font-size:0.85rem;margin:16px 0 6px;border-bottom:1px solid #1e3a5f;padding-bottom:4px;text-transform:uppercase;letter-spacing:0.06em">$1</h2>')
+    .replace(/```[a-z]*\n([\s\S]*?)```/g, (_m, c) => `<pre style="background:#070b14;border:1px solid #1e3a5f;border-radius:6px;padding:10px;overflow-x:auto;color:#00ff9d;font-size:0.72rem;line-height:1.6">${c.replace(/\n$/,'')}</pre>`)
+    .replace(/`([^`]+)`/g, '<code style="background:#0a0e1a;color:#00ff9d;padding:1px 5px;border-radius:3px;border:1px solid #1e3a5f">$1</code>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#fff">$1</strong>')
+    .replace(/^- (.+)$/gm, '<li style="color:#94a3b8;margin-left:16px;list-style:disc;font-size:0.78rem;line-height:1.7">$1</li>')
+    .replace(/^\d+\. (.+)$/gm, '<li style="color:#94a3b8;margin-left:16px;list-style:decimal;font-size:0.78rem;line-height:1.7">$1</li>')
+    .replace(/\n\n/g, '<br/>')
+}
+
 export default function ScopeAnalyzerPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
@@ -277,6 +290,9 @@ export default function ScopeAnalyzerPage() {
   })
   const [plan, setPlan] = useState<EngagementPlan | null>(null)
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiPlan, setAiPlan] = useState<string | null>(null)
+  const [aiError, setAiError] = useState<string | null>(null)
 
   useEffect(() => { if (status === 'unauthenticated') router.push('/login') }, [status, router])
 
@@ -291,6 +307,30 @@ export default function ScopeAnalyzerPage() {
   function analyze() {
     if (!input.targets.trim()) return
     setPlan(generatePlan(input))
+  }
+
+  async function analyzeAI() {
+    if (!input.targets.trim()) return
+    setAiLoading(true); setAiPlan(null); setAiError(null)
+    const engagement_type = (input.types[0] || 'web-app').replace(/-/g, '_')
+    const extraTypes = input.types.slice(1).map(t => t.replace(/-/g, '_')).join(', ')
+    try {
+      const res = await fetch('https://mcp.cyberopsplatform.co.uk/api/scope-analyser', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          engagement_type,
+          targets: input.targets,
+          objectives: input.objectives,
+          restrictions: input.restrictions,
+          additional_context: `Available timeframe: ${input.timeframe}` + (extraTypes ? `. Additional engagement types: ${extraTypes}` : ''),
+        }),
+      })
+      const json = await res.json()
+      if (json.status === 'error' || json.error) setAiError(json.error ?? 'Gemini request failed on the gateway')
+      else if (json.plan) setAiPlan(json.plan as string)
+      else setAiError('Empty response from the gateway')
+    } catch { setAiError('Could not reach the MCP gateway') } finally { setAiLoading(false) }
   }
 
   function copyCommands(cmds: string[], idx: number) {
@@ -359,8 +399,19 @@ export default function ScopeAnalyzerPage() {
               </select>
             </div>
             <button className="cyber-btn w-full" onClick={analyze} disabled={!input.targets.trim()} style={{ padding: '12px', fontSize: '0.9rem' }}>⚡ Analyze Scope & Generate Plan</button>
+            <button onClick={analyzeAI} disabled={!input.targets.trim() || aiLoading} style={{ width: '100%', marginTop: 10, padding: '11px', fontSize: '0.85rem', fontFamily: 'monospace', borderRadius: 8, cursor: input.targets.trim() && !aiLoading ? 'pointer' : 'not-allowed', background: 'transparent', border: '1px solid #8b5cf6', color: '#c4b5fd' }}>{aiLoading ? '✨ Generating with Gemini…' : '✨ Generate with Gemini (AI)'}</button>
           </div>
           <div>
+            {(aiLoading || aiPlan || aiError) && (
+              <div className="cyber-card p-5" style={{ marginBottom: 16, borderColor: '#8b5cf6' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <span style={{ color: '#c4b5fd', fontFamily: 'monospace', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>✨ AI Plan — Gemini</span>
+                </div>
+                {aiLoading && <div style={{ color: '#c4b5fd', fontFamily: 'monospace', fontSize: '0.8rem' }}>Generating with Gemini…</div>}
+                {aiError && <div style={{ color: '#ff4444', fontFamily: 'monospace', fontSize: '0.78rem' }}>{aiError}</div>}
+                {aiPlan && <div style={{ color: '#94a3b8', fontSize: '0.8rem', lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: renderMarkdown(aiPlan) }} />}
+              </div>
+            )}
             {!plan ? (
               <div className="cyber-card p-10" style={{ textAlign: 'center', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
                 <div style={{ fontSize: '3rem' }}>🎯</div>
