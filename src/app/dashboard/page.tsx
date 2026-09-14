@@ -211,12 +211,13 @@ function StrixPanel() {
     if (!target.trim()) return
     setLoading(true); setOut(null); setError(null)
     try {
-      const res = await fetch(`${GATEWAY}/mcp/strix`, {
+      const res = await fetch('/api/gateway/strix', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target: target.trim(), flags: flags.trim() }),
       })
       const json = await res.json()
-      if (json.status === 'error' && !json.stdout) setError(json.stderr || json.error || 'STRIX failed on node-02')
+      if (json.detail) setError(typeof json.detail === 'string' ? json.detail : JSON.stringify(json.detail))
+      else if (json.status === 'error' && !json.stdout) setError(json.stderr || json.error || 'STRIX failed on node-02')
       else setOut(json.stdout || json.stderr || 'No output')
     } catch { setError('Could not reach the MCP gateway') } finally { setLoading(false) }
   }
@@ -226,14 +227,14 @@ function StrixPanel() {
         <span style={{ fontSize: '1.5rem' }}>🤖</span>
         <div>
           <h2 className="font-semibold" style={{ color: '#00d4ff' }}>STRIX</h2>
-          <p className="text-xs" style={{ color: '#64748b' }}>AI pentest agent — node-02 (can take minutes)</p>
+          <p className="text-xs" style={{ color: '#64748b' }}>AI pentest agent — node-02 · capped: quick mode, ≤40 turns, ≤$3 per scan</p>
         </div>
       </div>
       <div className="flex gap-2 mb-2">
         <input className="cyber-input" placeholder="target (URL / path)" value={target} onChange={e => setTarget(e.target.value)} onKeyDown={e => e.key === 'Enter' && run()} />
       </div>
       <div className="flex gap-2">
-        <input className="cyber-input" placeholder="flags (optional)" value={flags} onChange={e => setFlags(e.target.value)} style={{ maxWidth: 200 }} />
+        <input className="cyber-input" placeholder="flags: -m quick|standard, --max-turns N, --max-budget USD" value={flags} onChange={e => setFlags(e.target.value)} style={{ maxWidth: 200 }} />
         <button className="cyber-btn whitespace-nowrap" onClick={run} disabled={loading}>Run</button>
       </div>
       <ResultBox label="Output" data={out} loading={loading} error={error} />

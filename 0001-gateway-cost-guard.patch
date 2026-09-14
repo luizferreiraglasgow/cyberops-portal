@@ -1,0 +1,145 @@
+From e2e206d69945c5b804f679e1d937a15c89a289a7 Mon Sep 17 00:00:00 2001
+From: Luiz Ferreira <luizferreiraglasgow@gmail.com>
+Date: Sun, 13 Sep 2026 11:08:27 +0000
+Subject: [PATCH] Gateway cost-guard: proxy Scope Analyzer + STRIX through
+ server routes with GATEWAY_API_TOKEN
+
+- /api/gateway/scope-analyser and /api/gateway/strix (Authentik session required,
+  Bearer token stays server-side; Hobby-safe 60s maxDuration)
+- pages call the local routes instead of mcp.cyberopsplatform.co.uk directly
+- show gateway 'notice' (Ollama fallback) and validation errors (capped flags)
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01VEUMH1msynKPbT7qByuMSp
+---
+ src/app/api/gateway/scope-analyser/route.ts |  4 +++
+ src/app/api/gateway/strix/route.ts          |  4 +++
+ src/app/dashboard/page.tsx                  |  9 +++---
+ src/app/scope-analyzer/page.tsx             |  4 +--
+ src/lib/gateway.ts                          | 33 +++++++++++++++++++++
+ 5 files changed, 48 insertions(+), 6 deletions(-)
+ create mode 100644 src/app/api/gateway/scope-analyser/route.ts
+ create mode 100644 src/app/api/gateway/strix/route.ts
+ create mode 100644 src/lib/gateway.ts
+
+diff --git a/src/app/api/gateway/scope-analyser/route.ts b/src/app/api/gateway/scope-analyser/route.ts
+new file mode 100644
+index 0000000..9319d82
+--- /dev/null
++++ b/src/app/api/gateway/scope-analyser/route.ts
+@@ -0,0 +1,4 @@
++import { NextRequest } from 'next/server'
++import { proxyGateway } from '@/lib/gateway'
++export const maxDuration = 60 // Vercel Hobby limit; the gateway keeps running the scan on node-02 (max 300s)
++export async function POST(req: NextRequest) { return proxyGateway(req, '/api/scope-analyser', 55_000) }
+diff --git a/src/app/api/gateway/strix/route.ts b/src/app/api/gateway/strix/route.ts
+new file mode 100644
+index 0000000..a3783ff
+--- /dev/null
++++ b/src/app/api/gateway/strix/route.ts
+@@ -0,0 +1,4 @@
++import { NextRequest } from 'next/server'
++import { proxyGateway } from '@/lib/gateway'
++export const maxDuration = 60 // Vercel Hobby limit; the gateway keeps running the scan on node-02 (max 300s)
++export async function POST(req: NextRequest) { return proxyGateway(req, '/mcp/strix', 55_000) }
+diff --git a/src/app/dashboard/page.tsx b/src/app/dashboard/page.tsx
+index f7bb450..884c2c0 100644
+--- a/src/app/dashboard/page.tsx
++++ b/src/app/dashboard/page.tsx
+@@ -211,12 +211,13 @@ function StrixPanel() {
+     if (!target.trim()) return
+     setLoading(true); setOut(null); setError(null)
+     try {
+-      const res = await fetch(`${GATEWAY}/mcp/strix`, {
++      const res = await fetch('/api/gateway/strix', {
+         method: 'POST', headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ target: target.trim(), flags: flags.trim() }),
+       })
+       const json = await res.json()
+-      if (json.status === 'error' && !json.stdout) setError(json.stderr || json.error || 'STRIX failed on node-02')
++      if (json.detail) setError(typeof json.detail === 'string' ? json.detail : JSON.stringify(json.detail))
++      else if (json.status === 'error' && !json.stdout) setError(json.stderr || json.error || 'STRIX failed on node-02')
+       else setOut(json.stdout || json.stderr || 'No output')
+     } catch { setError('Could not reach the MCP gateway') } finally { setLoading(false) }
+   }
+@@ -226,14 +227,14 @@ function StrixPanel() {
+         <span style={{ fontSize: '1.5rem' }}>🤖</span>
+         <div>
+           <h2 className="font-semibold" style={{ color: '#00d4ff' }}>STRIX</h2>
+-          <p className="text-xs" style={{ color: '#64748b' }}>AI pentest agent — node-02 (can take minutes)</p>
++          <p className="text-xs" style={{ color: '#64748b' }}>AI pentest agent — node-02 · capped: quick mode, ≤40 turns, ≤$3 per scan</p>
+         </div>
+       </div>
+       <div className="flex gap-2 mb-2">
+         <input className="cyber-input" placeholder="target (URL / path)" value={target} onChange={e => setTarget(e.target.value)} onKeyDown={e => e.key === 'Enter' && run()} />
+       </div>
+       <div className="flex gap-2">
+-        <input className="cyber-input" placeholder="flags (optional)" value={flags} onChange={e => setFlags(e.target.value)} style={{ maxWidth: 200 }} />
++        <input className="cyber-input" placeholder="flags: -m quick|standard, --max-turns N, --max-budget USD" value={flags} onChange={e => setFlags(e.target.value)} style={{ maxWidth: 200 }} />
+         <button className="cyber-btn whitespace-nowrap" onClick={run} disabled={loading}>Run</button>
+       </div>
+       <ResultBox label="Output" data={out} loading={loading} error={error} />
+diff --git a/src/app/scope-analyzer/page.tsx b/src/app/scope-analyzer/page.tsx
+index 57eef8e..9b620c3 100644
+--- a/src/app/scope-analyzer/page.tsx
++++ b/src/app/scope-analyzer/page.tsx
+@@ -315,7 +315,7 @@ export default function ScopeAnalyzerPage() {
+     const engagement_type = (input.types[0] || 'web-app').replace(/-/g, '_')
+     const extraTypes = input.types.slice(1).map(t => t.replace(/-/g, '_')).join(', ')
+     try {
+-      const res = await fetch('https://mcp.cyberopsplatform.co.uk/api/scope-analyser', {
++      const res = await fetch('/api/gateway/scope-analyser', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({
+@@ -328,7 +328,7 @@ export default function ScopeAnalyzerPage() {
+       })
+       const json = await res.json()
+       if (json.status === 'error' || json.error) setAiError(json.error ?? 'Gemini request failed on the gateway')
+-      else if (json.plan) setAiPlan(json.plan as string)
++      else if (json.plan) setAiPlan((json.notice ? `> ⚠️ ${json.notice}\n\n` : '') + (json.plan as string))
+       else setAiError('Empty response from the gateway')
+     } catch { setAiError('Could not reach the MCP gateway') } finally { setAiLoading(false) }
+   }
+diff --git a/src/lib/gateway.ts b/src/lib/gateway.ts
+new file mode 100644
+index 0000000..7ae5fb6
+--- /dev/null
++++ b/src/lib/gateway.ts
+@@ -0,0 +1,33 @@
++import { getServerSession } from 'next-auth'
++import { authOptions } from '@/lib/auth'
++import { NextRequest, NextResponse } from 'next/server'
++
++const GATEWAY_URL = process.env.GATEWAY_URL ?? 'https://mcp.cyberopsplatform.co.uk'
++
++/** Server-side proxy to a paid MCP gateway endpoint (Gemini / Strix).
++ *  Requires an Authentik session and forwards the gateway Bearer token,
++ *  which never reaches the browser. */
++export async function proxyGateway(req: NextRequest, path: string, timeoutMs = 320_000) {
++  const session = await getServerSession(authOptions)
++  if (!session) return NextResponse.json({ error: 'Unauthorized', status: 'error' }, { status: 401 })
++  const token = process.env.GATEWAY_API_TOKEN
++  if (!token) return NextResponse.json({ error: 'GATEWAY_API_TOKEN is not configured on the portal', status: 'error' }, { status: 503 })
++  let body: unknown
++  try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON body', status: 'error' }, { status: 400 }) }
++  try {
++    const res = await fetch(`${GATEWAY_URL}${path}`, {
++      method: 'POST',
++      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
++      body: JSON.stringify(body),
++      signal: AbortSignal.timeout(timeoutMs),
++      cache: 'no-store',
++    })
++    const text = await res.text()
++    let data: unknown
++    try { data = JSON.parse(text) } catch { data = { error: text.slice(0, 500), status: 'error' } }
++    return NextResponse.json(data, { status: res.status })
++  } catch (e) {
++    const msg = e instanceof Error && e.name === 'TimeoutError' ? 'Gateway timed out' : 'Could not reach the MCP gateway'
++    return NextResponse.json({ error: msg, status: 'error' }, { status: 502 })
++  }
++}
+-- 
+2.43.0
+

@@ -1,5 +1,5 @@
 export type ToolNode = 'node-01' | 'node-02' | 'web' | 'api'
-export type TeamType = 'red' | 'blue' | 'bug-hunting'
+export type TeamType = 'red' | 'blue' | 'bug-hunting' | 'osint' | 'utility'
 export type ActionType = 'launch' | 'commands' | 'methodology' | 'both' | 'all'
 
 export interface Tool {
@@ -94,6 +94,23 @@ export const toolCategories: ToolCategory[] = [
       { id: 'ffuf', name: 'ffuf', description: 'Web fuzzer', node: 'node-01', guacNode: 'node-01', actions: ['launch', 'commands'], commands: ['# Directory fuzzing', 'ffuf -w /usr/share/seclists/Discovery/Web-Content/common.txt -u http://target/FUZZ', '', '# Subdomain fuzzing', 'ffuf -w subdomains.txt -u http://FUZZ.target.com -H "Host: FUZZ.target.com"', '', '# Parameter fuzzing', 'ffuf -w params.txt -u "http://target/page?FUZZ=test"', '', '# POST body fuzzing', 'ffuf -w payloads.txt -u http://target/login -X POST -d "user=admin&pass=FUZZ"', '', '# Filter by response size', 'ffuf -w list.txt -u http://target/FUZZ -fs 1234', '', '# Output JSON', 'ffuf -w list.txt -u http://target/FUZZ -o results.json -of json'] },
       { id: 'nuclei', name: 'Nuclei', description: 'Template scan', node: 'node-01', guacNode: 'node-01', actions: ['launch', 'commands'], commands: ['# Update templates', 'nuclei -update-templates', '', '# Basic scan', 'nuclei -u https://target.com', '', '# Only critical/high', 'nuclei -u https://target.com -s critical,high', '', '# Multiple targets', 'nuclei -l targets.txt -t technologies/', '', '# CVE templates', 'nuclei -u https://target.com -t cves/', '', '# Without SSL verify', 'nuclei -u https://target.com -ni', '', '# Output', 'nuclei -u https://target.com -o results.txt -json'] },
       { id: 'httpx', name: 'httpx / Wayback', description: 'HTTP probe', node: 'node-01', guacNode: 'node-01', actions: ['launch', 'commands'], commands: ['# Check which subdomains are alive', 'cat subs.txt | httpx -silent -status-code -title', '', '# Tech detection', 'cat subs.txt | httpx -tech-detect', '', '# Screenshots', 'cat subs.txt | httpx -screenshot -o screenshots/', '', '# Wayback Machine URLs', 'waybackurls target.com | tee wayback.txt', '', '# Filter interesting endpoints', 'cat wayback.txt | grep "?.*=" | sort -u', '', '# gau (GetAllUrls)', 'gau target.com | grep "\\.js$"'] },
+    ],
+  },
+  {
+    id: 'osint-people',
+    name: 'Recon / OSINT',
+    team: 'osint',
+    tools: [
+      { id: 'webmii', name: 'WebMii', description: 'People search — aggregates public web profiles by name', node: 'web', webUrl: 'https://webmii.com/', actions: ['launch'] },
+      { id: 'whatsmyname', name: 'WhatsMyName', description: 'Username enumeration across 600+ sites (OSINT)', node: 'web', webUrl: 'https://whatsmyname.app/', actions: ['launch'] },
+    ],
+  },
+  {
+    id: 'utilities',
+    name: 'Utilities',
+    team: 'utility',
+    tools: [
+      { id: 'it-tools', name: 'IT-Tools', description: 'Handy developer/IT toolbox — encoders, converters, generators, network helpers', node: 'web', webUrl: 'https://it-tools.tech/', actions: ['launch'] },
     ],
   },
 ]

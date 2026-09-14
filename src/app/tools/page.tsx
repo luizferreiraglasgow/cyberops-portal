@@ -13,6 +13,8 @@ const teamConfig = {
   red: { label: 'Red Team', bg: '#7f1d1d', border: '#ef4444', color: '#fca5a5' },
   blue: { label: 'Blue Team', bg: '#1e3a5f', border: '#3b82f6', color: '#93c5fd' },
   'bug-hunting': { label: 'Bug Hunting', bg: '#78350f', border: '#f59e0b', color: '#fcd34d' },
+  osint: { label: 'OSINT', bg: '#164e3b', border: '#10b981', color: '#6ee7b7' },
+  utility: { label: 'Utility', bg: '#0e2a4a', border: '#00d4ff', color: '#7dd3fc' },
 }
 
 function TeamBadge({ team }: { team: keyof typeof teamConfig }) {
@@ -82,7 +84,7 @@ export default function ToolsPage() {
   const router = useRouter()
   const [activePanel, setActivePanel] = useState<Tool | null>(null)
   const [panelType, setPanelType] = useState<'commands' | 'methodology' | null>(null)
-  const [filterTeam, setFilterTeam] = useState<'all' | 'red' | 'blue' | 'bug-hunting'>('all')
+  const [filterTeam, setFilterTeam] = useState<'all' | 'red' | 'blue' | 'bug-hunting' | 'osint' | 'utility'>('all')
   const [search, setSearch] = useState('')
 
   useEffect(() => { if (status === 'unauthenticated') router.push('/login') }, [status, router])
@@ -129,10 +131,10 @@ export default function ToolsPage() {
         </div>
         <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap', alignItems: 'center' }}>
           <div style={{ display: 'flex', gap: 6 }}>
-            {(['all', 'red', 'blue', 'bug-hunting'] as const).map(team => (
+            {(['all', 'red', 'blue', 'bug-hunting', 'osint', 'utility'] as const).map(team => (
               <button key={team} onClick={() => setFilterTeam(team)}
                 style={{ background: filterTeam === team ? '#00d4ff22' : 'transparent', border: `1px solid ${filterTeam === team ? '#00d4ff' : '#1e3a5f'}`, color: filterTeam === team ? '#00d4ff' : '#64748b', borderRadius: 6, padding: '5px 14px', fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'monospace', textTransform: 'capitalize' }}>
-                {team === 'all' ? 'All' : team === 'red' ? '🔴 Red Team' : team === 'blue' ? '🔵 Blue Team' : '🟡 Bug Hunting'}
+                {team === 'all' ? 'All' : team === 'red' ? '🔴 Red Team' : team === 'blue' ? '🔵 Blue Team' : team === 'bug-hunting' ? '🟡 Bug Hunting' : team === 'osint' ? '🟢 OSINT' : '🔵 Utility'}
               </button>
             ))}
           </div>

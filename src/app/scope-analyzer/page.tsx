@@ -293,6 +293,12 @@ export default function ScopeAnalyzerPage() {
   const [aiLoading, setAiLoading] = useState(false)
   const [aiPlan, setAiPlan] = useState<string | null>(null)
   const [aiError, setAiError] = useState<string | null>(null)
+  const [aiBackend, setAiBackend] = useState<string | null>(null)
+  const [aiModel, setAiModel] = useState<string | null>(null)
+  const [aiNotice, setAiNotice] = useState<string | null>(null)
+  const [scopeDoc, setScopeDoc] = useState<{ name: string; text: string; chars: number; truncated?: boolean } | null>(null)
+  const [scopeDocError, setScopeDocError] = useState<string | null>(null)
+  const [scopeDocLoading, setScopeDocLoading] = useState(false)
 
   useEffect(() => { if (status === 'unauthenticated') router.push('/login') }, [status, router])
 
@@ -309,13 +315,52 @@ export default function ScopeAnalyzerPage() {
     setPlan(generatePlan(input))
   }
 
+  async function uploadScopeDoc(file: File) {
+    setScopeDocError(null); setScopeDocLoading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/scope/extract', { method: 'POST', body: fd })
+      const json = await res.json()
+      if (!res.ok || json.error) {
+        setScopeDoc(null)
+        setScopeDocError(json.error ?? `Could not read the document (${res.status}).`)
+      } else {
+        setScopeDoc({ name: json.filename, text: json.text, chars: json.chars, truncated: json.truncated })
+      }
+    } catch {
+      setScopeDoc(null); setScopeDocError('Upload failed — check your connection and try again.')
+    } finally { setScopeDocLoading(false) }
+  }
+
+  function clearScopeDoc() { setScopeDoc(null); setScopeDocError(null) }
+
+  // Map the gateway/proxy response to a clear, actionable message.
+  function friendlyError(res: Response, json: { error?: string; notice?: string }): string {
+    const raw = (json?.error || json?.notice || '').toString()
+    if (res.status === 401) return 'Your session expired — please sign in again.'
+    if (res.status === 403) return 'Access denied by the gateway (CORS / origin). Open this from the portal.'
+    if (res.status === 429 || /quota|billing|exhaust|balance|resource_exhausted/i.test(raw))
+      return 'Gemini limit reached — check the prepaid balance. ' + (raw || '')
+    if (res.status === 503) return raw || 'The gateway is not fully configured (missing API token).'
+    if (res.status === 502 || res.status === 504 || /timeout|timed out|deadline/i.test(raw))
+      return 'The plan took too long (60s limit) — try again, or narrow the scope.'
+    return raw || `Request failed on the gateway (HTTP ${res.status}).`
+  }
+
   async function analyzeAI() {
     if (!input.targets.trim()) return
-    setAiLoading(true); setAiPlan(null); setAiError(null)
+    setAiLoading(true); setAiPlan(null); setAiError(null); setAiBackend(null); setAiModel(null); setAiNotice(null)
     const engagement_type = (input.types[0] || 'web-app').replace(/-/g, '_')
     const extraTypes = input.types.slice(1).map(t => t.replace(/-/g, '_')).join(', ')
+    // Fold the uploaded scope document into additional_context so the current
+    // gateway (which already injects additional_context into the Gemini prompt)
+    // plans from the real document; also send scope_document for forward-compat.
+    const scopeBlock = scopeDoc?.text
+      ? `\n\nScope Document (${scopeDoc.name}) — authoritative RoE / NDA / briefing. Derive targets, scope and restrictions from this and never exceed it:\n${scopeDoc.text.slice(0, 12000)}`
+      : ''
     try {
-      const res = await fetch('https://mcp.cyberopsplatform.co.uk/api/scope-analyser', {
+      const res = await fetch('/api/gateway/scope-analyser', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -323,14 +368,22 @@ export default function ScopeAnalyzerPage() {
           targets: input.targets,
           objectives: input.objectives,
           restrictions: input.restrictions,
-          additional_context: `Available timeframe: ${input.timeframe}` + (extraTypes ? `. Additional engagement types: ${extraTypes}` : ''),
+          scope_document: scopeDoc?.text || '',
+          additional_context: `Available timeframe: ${input.timeframe}` + (extraTypes ? `. Additional engagement types: ${extraTypes}` : '') + scopeBlock,
         }),
       })
-      const json = await res.json()
-      if (json.status === 'error' || json.error) setAiError(json.error ?? 'Gemini request failed on the gateway')
-      else if (json.plan) setAiPlan(json.plan as string)
-      else setAiError('Empty response from the gateway')
-    } catch { setAiError('Could not reach the MCP gateway') } finally { setAiLoading(false) }
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || json.status === 'error' || (json.error && !json.plan)) {
+        setAiError(friendlyError(res, json))
+      } else if (json.plan) {
+        setAiPlan(json.plan as string)
+        setAiBackend((json.backend as string) ?? 'gemini')
+        setAiModel((json.model as string) ?? null)
+        setAiNotice((json.notice as string) ?? null)
+      } else {
+        setAiError(friendlyError(res, json))
+      }
+    } catch { setAiError('Could not reach the MCP gateway.') } finally { setAiLoading(false) }
   }
 
   function copyCommands(cmds: string[], idx: number) {
@@ -362,10 +415,25 @@ export default function ScopeAnalyzerPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="cyber-card p-6">
             <h2 style={{ color: '#00d4ff', fontFamily: 'monospace', fontSize: '0.85rem', fontWeight: 600, marginBottom: 20, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Engagement Input</h2>
-            <div style={{ border: '1px dashed #1e3a5f', borderRadius: 8, padding: '20px', textAlign: 'center', marginBottom: 20, color: '#334155', fontSize: '0.75rem', fontFamily: 'monospace' }}>
-              <div style={{ fontSize: '2rem', marginBottom: 8 }}>📁</div>
-              Fill in the fields below
-              <div style={{ marginTop: 4, color: '#475569', fontSize: '0.7rem' }}>Scope doc · RoE · NDA · Briefing</div>
+            <div style={{ marginBottom: 20 }}>
+              <label htmlFor="scopeDocInput" style={{ display: 'block', border: `1px dashed ${scopeDoc ? '#00d4ff' : '#1e3a5f'}`, borderRadius: 8, padding: '18px', textAlign: 'center', color: '#334155', fontSize: '0.75rem', fontFamily: 'monospace', cursor: scopeDocLoading ? 'wait' : 'pointer' }}>
+                <div style={{ fontSize: '1.8rem', marginBottom: 6 }}>{scopeDocLoading ? '⏳' : scopeDoc ? '📄' : '📁'}</div>
+                {scopeDocLoading ? (
+                  <span style={{ color: '#00d4ff' }}>Reading document…</span>
+                ) : scopeDoc ? (
+                  <span style={{ color: '#00d4ff' }}>{scopeDoc.name} · {scopeDoc.chars.toLocaleString()} chars{scopeDoc.truncated ? ' (truncated)' : ''}</span>
+                ) : (
+                  <>Upload scope doc · RoE · NDA · Briefing
+                    <div style={{ marginTop: 4, color: '#475569', fontSize: '0.7rem' }}>PDF · DOCX · TXT — sent to the AI as the real scope</div>
+                  </>
+                )}
+              </label>
+              <input id="scopeDocInput" type="file" accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files?.[0]; if (f) uploadScopeDoc(f); e.target.value = '' }} />
+              {scopeDoc && !scopeDocLoading && (
+                <button onClick={clearScopeDoc} style={{ marginTop: 6, background: 'transparent', border: '1px solid #1e3a5f', color: '#64748b', borderRadius: 6, padding: '3px 10px', fontSize: '0.68rem', fontFamily: 'monospace', cursor: 'pointer' }}>✕ Remove document</button>
+              )}
+              {scopeDocError && <div style={{ marginTop: 6, color: '#ff6b6b', fontSize: '0.7rem', fontFamily: 'monospace' }}>{scopeDocError}</div>}
             </div>
             <div style={{ marginBottom: 16 }}>
               <label style={{ color: '#64748b', fontSize: '0.72rem', fontFamily: 'monospace', display: 'block', marginBottom: 8 }}>Engagement type</label>
@@ -402,16 +470,25 @@ export default function ScopeAnalyzerPage() {
             <button onClick={analyzeAI} disabled={!input.targets.trim() || aiLoading} style={{ width: '100%', marginTop: 10, padding: '11px', fontSize: '0.85rem', fontFamily: 'monospace', borderRadius: 8, cursor: input.targets.trim() && !aiLoading ? 'pointer' : 'not-allowed', background: 'transparent', border: '1px solid #8b5cf6', color: '#c4b5fd' }}>{aiLoading ? '✨ Generating with Gemini…' : '✨ Generate with Gemini (AI)'}</button>
           </div>
           <div>
-            {(aiLoading || aiPlan || aiError) && (
-              <div className="cyber-card p-5" style={{ marginBottom: 16, borderColor: '#8b5cf6' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                  <span style={{ color: '#c4b5fd', fontFamily: 'monospace', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>✨ AI Plan — Gemini</span>
+            {(aiLoading || aiPlan || aiError) && (() => {
+              const isOllama = !!aiBackend && /ollama/i.test(aiBackend)
+              const accent = aiError ? '#ff6b6b' : isOllama ? '#f59e0b' : '#8b5cf6'
+              return (
+              <div className="cyber-card p-5" style={{ marginBottom: 16, borderColor: accent }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+                  <span style={{ color: isOllama ? '#fcd34d' : '#c4b5fd', fontFamily: 'monospace', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>✨ AI Plan</span>
+                  {aiPlan && (
+                    <span style={{ background: isOllama ? '#78350f' : '#312e81', border: `1px solid ${isOllama ? '#f59e0b' : '#8b5cf6'}`, color: isOllama ? '#fcd34d' : '#c4b5fd', borderRadius: 4, padding: '2px 8px', fontSize: '0.62rem', fontFamily: 'monospace', fontWeight: 700 }}>
+                      {isOllama ? '⚠ Local Ollama (lower quality)' : 'Gemini'}{aiModel ? ` · ${aiModel}` : ''}
+                    </span>
+                  )}
                 </div>
-                {aiLoading && <div style={{ color: '#c4b5fd', fontFamily: 'monospace', fontSize: '0.8rem' }}>Generating with Gemini…</div>}
-                {aiError && <div style={{ color: '#ff4444', fontFamily: 'monospace', fontSize: '0.78rem' }}>{aiError}</div>}
+                {aiLoading && <div style={{ color: '#c4b5fd', fontFamily: 'monospace', fontSize: '0.8rem' }}>Generating…{scopeDoc ? ' (using your uploaded scope document)' : ''}</div>}
+                {aiError && <div style={{ color: '#ff6b6b', fontFamily: 'monospace', fontSize: '0.78rem', lineHeight: 1.5 }}>{aiError}</div>}
+                {aiNotice && aiPlan && <div style={{ color: '#f59e0b', fontFamily: 'monospace', fontSize: '0.72rem', marginBottom: 10, padding: '6px 10px', background: '#78350f22', border: '1px solid #78350f', borderRadius: 6 }}>⚠️ {aiNotice}</div>}
                 {aiPlan && <div style={{ color: '#94a3b8', fontSize: '0.8rem', lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: renderMarkdown(aiPlan) }} />}
               </div>
-            )}
+            )})()}
             {!plan ? (
               <div className="cyber-card p-10" style={{ textAlign: 'center', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
                 <div style={{ fontSize: '3rem' }}>🎯</div>
