@@ -32,10 +32,42 @@ interface EngagementPlan {
   legalReminder: string[]
 }
 
+interface NormalizedTarget {
+  raw: string
+  host: string   // bare hostname or IP — no scheme, path, port or trailing slash
+  url: string    // single clean URL (https unless the raw input was http)
+  isIp: boolean
+  isCidr: boolean
+}
+
+// Turn whatever the user typed (https://site/, site.com, 10.0.0.5, 10.0.0.0/24)
+// into the forms each tool actually expects. DNS/port tools want `host`;
+// web tools want `url`. This is what stops `http://https://…`, `whois https://…`
+// and `nmap …/24` on a hostname.
+function normalizeTarget(raw: string): NormalizedTarget {
+  const trimmed = (raw || '').trim()
+  const isCidr = /^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}$/.test(trimmed)
+  if (isCidr) return { raw: trimmed, host: trimmed, url: trimmed, isIp: false, isCidr: true }
+  const scheme = /^http:\/\//i.test(trimmed) ? 'http' : 'https'
+  const host = trimmed
+    .replace(/^[a-z]+:\/\//i, '') // strip scheme
+    .replace(/[/?#].*$/, '')       // strip path / query / fragment
+    .replace(/:\d+$/, '')          // strip port
+    .trim()
+  const isIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(host)
+  return { raw: trimmed, host, url: `${scheme}://${host}`, isIp, isCidr: false }
+}
+
 function generatePlan(input: EngagementInput): EngagementPlan {
   const phases: Phase[] = []
   const targets = input.targets.split('\n').map(t => t.trim()).filter(Boolean)
-  const t = targets[0] || '<target>'
+  const nt = normalizeTarget(targets[0] || '<target>')
+  const host = nt.host                 // bare domain / IP for DNS, OSINT, port scans
+  const url = nt.url                   // clean URL for web tools
+  // Host-discovery target: only a bare IP gets a /24 sweep; a domain is scanned as-is.
+  const sweep = targets.length > 1
+    ? targets.map(x => normalizeTarget(x).host).join(' ')
+    : nt.isCidr ? nt.host : nt.isIp ? `${nt.host}/24` : nt.host
   const isAD = input.types.includes('active-directory')
   const isWeb = input.types.includes('web-app') || input.types.includes('api-cloud')
   const isNetwork = input.types.includes('network') || input.types.includes('red-team')
@@ -47,18 +79,18 @@ function generatePlan(input: EngagementInput): EngagementPlan {
     tools: ['theHarvester', 'Subfinder', 'Amass', 'Shodan'],
     commands: [
       `# OSINT — emails and subdomains`,
-      `theHarvester -d ${t} -b all -f recon_${t}.html`,
-      `subfinder -d ${t} -all -recursive -o subs.txt`,
-      `amass enum -passive -d ${t} -o amass_subs.txt`,
-      `cat subs.txt amass_subs.txt | sort -u > all_subs.txt`,
+      `theHarvester -d ${host} -b all -f recon_${host}.html`,
+      `subfinder -d ${host} -all -recursive -o subs.txt`,
+      `amass enum -passive -d ${host} | tee amass_subs.txt   # Amass v5 removed -o`,
+      `cat subs.txt amass_subs.txt 2>/dev/null | sort -u > all_subs.txt`,
       ``,
-      `# Shodan`,
-      `shodan search "hostname:${t}"`,
-      `shodan search "ssl:${t} port:443"`,
+      `# Shodan  (run 'shodan init <API_KEY>' once first)`,
+      `shodan search "hostname:${host}"`,
+      `shodan search "ssl:${host} port:443"`,
       ``,
       `# Whois / DNS`,
-      `whois ${t}`,
-      `dig ${t} ANY +short`,
+      `whois ${host}`,
+      `dig ${host} ANY +short`,
       `dnsx -l all_subs.txt -a -mx -ns -cname -silent`,
     ],
     notes: 'Generates no direct traffic to the target. Safe for the initial phase.',
@@ -70,19 +102,19 @@ function generatePlan(input: EngagementInput): EngagementPlan {
     tools: ['Nmap', 'Rustscan', 'httpx'],
     commands: [
       `# Live host discovery`,
-      `nmap -sn ${targets.length > 1 ? targets.join(' ') : t + '/24'} -oG hosts_alive.txt`,
+      `nmap -sn ${sweep} -oG hosts_alive.txt`,
       ``,
       `# Full port scan`,
-      `nmap -sV -sC -p- --open -T4 ${t} -oX nmap_full.xml`,
+      `nmap -sV -sC -p- --open -T4 ${host} -oX nmap_full.xml`,
       ``,
       `# Rustscan (faster)`,
-      `rustscan -a ${t} --ulimit 5000 -- -sV -sC`,
+      `rustscan -a ${host} --ulimit 5000 -- -sV -sC`,
       ``,
-      `# Live web services`,
-      `cat all_subs.txt | httpx -silent -status-code -title -tech-detect -o web_alive.txt`,
+      `# Live web services  (on Kali the ProjectDiscovery tool is 'httpx-toolkit' — 'httpx' is the Python lib)`,
+      `cat all_subs.txt | httpx-toolkit -silent -status-code -title -tech-detect -o web_alive.txt`,
       ``,
       `# Screenshots`,
-      `cat web_alive.txt | httpx -screenshot -o screenshots/`,
+      `httpx-toolkit -l web_alive.txt -screenshot -srd screenshots`,
     ],
   })
 
@@ -92,19 +124,19 @@ function generatePlan(input: EngagementInput): EngagementPlan {
       priority: 'high',
       tools: ['Burp Suite', 'ffuf', 'Nuclei', 'SQLmap'],
       commands: [
-        `# Directory fuzzing`,
-        `ffuf -w /usr/share/seclists/Discovery/Web-Content/common.txt -u http://${t}/FUZZ -mc 200,301,302 -o ffuf_dirs.json`,
+        `# Directory fuzzing  (needs seclists: sudo apt install seclists)`,
+        `ffuf -w /usr/share/seclists/Discovery/Web-Content/common.txt -u ${url}/FUZZ -mc 200,301,302 -o ffuf_dirs.json`,
         ``,
         `# Parameters (Wayback)`,
-        `waybackurls ${t} | grep "?.*=" | sort -u > wayback_params.txt`,
-        `gau ${t} >> wayback_params.txt`,
+        `waybackurls ${host} | grep "?.*=" | sort -u > wayback_params.txt`,
+        `gau ${host} >> wayback_params.txt`,
         ``,
-        `# Nuclei — known vulnerabilities`,
-        `nuclei -u https://${t} -s critical,high -o nuclei_results.txt`,
-        `nuclei -u https://${t} -t cves/ -t technologies/`,
+        `# Nuclei — known vulnerabilities  (run 'nuclei -update-templates' first)`,
+        `nuclei -u ${url} -s critical,high -o nuclei_results.txt`,
+        `nuclei -u ${url} -tags cve,tech,exposure`,
         ``,
         `# Automated SQLi (only if authorized)`,
-        `sqlmap -u "http://${t}/page?id=1" --batch --level=3 --risk=2`,
+        `sqlmap -u "${url}/page?id=1" --batch --level=3 --risk=2`,
         ``,
         `# Burp Suite — manual review (proxy 127.0.0.1:8080)`,
         `# Focos: IDOR, XSS, SSRF, SSTI, Auth bypass, Business logic`,
@@ -120,13 +152,13 @@ function generatePlan(input: EngagementInput): EngagementPlan {
       tools: ['Metasploit', 'Hydra', 'Responder'],
       commands: [
         `# Vulnerabilities with Metasploit`,
-        `msfconsole -q -x "db_nmap -sV ${t}; vulns"`,
+        `msfconsole -q -x "db_nmap -sV ${host}; vulns"`,
         ``,
         `# SMB (EternalBlue check)`,
-        `nmap --script smb-vuln-ms17-010 ${t}`,
+        `nmap --script smb-vuln-ms17-010 ${host}`,
         ``,
         `# Brute force SSH`,
-        `hydra -l admin -P /usr/share/wordlists/rockyou.txt ssh://${t} -t 4`,
+        `hydra -l admin -P /usr/share/wordlists/rockyou.txt ssh://${host} -t 4`,
         ``,
         `# LLMNR poisoning (internal network)`,
         `sudo responder -I eth0 -rdwv`,
@@ -141,23 +173,23 @@ function generatePlan(input: EngagementInput): EngagementPlan {
       tools: ['BloodHound', 'Impacket', 'CrackMapExec', 'Mimikatz'],
       commands: [
         `# AD enumeration (credentials required)`,
-        `crackmapexec smb ${t} -u '' -p '' --shares  # null session`,
+        `crackmapexec smb ${host} -u '' -p '' --shares  # null session`,
         ``,
         `# Kerberoasting`,
-        `GetUserSPNs.py domain.local/user:pass -dc-ip ${t} -request -outputfile kerberoast.hashes`,
+        `GetUserSPNs.py domain.local/user:pass -dc-ip ${host} -request -outputfile kerberoast.hashes`,
         `hashcat -m 13100 kerberoast.hashes /usr/share/wordlists/rockyou.txt`,
         ``,
         `# AS-REP Roasting`,
-        `GetNPUsers.py domain.local/ -usersfile users.txt -no-pass -dc-ip ${t}`,
+        `GetNPUsers.py domain.local/ -usersfile users.txt -no-pass -dc-ip ${host}`,
         ``,
         `# BloodHound collection`,
-        `bloodhound-python -u user -p pass -d domain.local -dc ${t} -c All`,
+        `bloodhound-python -u user -p pass -d domain.local -dc ${host} -c All`,
         ``,
         `# Pass-the-Hash`,
-        `crackmapexec smb ${t} -u admin -H <NTLM_HASH>`,
+        `crackmapexec smb ${host} -u admin -H <NTLM_HASH>`,
         ``,
         `# DCSync (if Domain Admin)`,
-        `secretsdump.py domain.local/admin:pass@${t}`,
+        `secretsdump.py domain.local/admin:pass@${host}`,
       ],
     })
   }
@@ -353,6 +385,15 @@ export default function ScopeAnalyzerPage() {
     setAiLoading(true); setAiPlan(null); setAiError(null); setAiBackend(null); setAiModel(null); setAiNotice(null)
     const engagement_type = (input.types[0] || 'web-app').replace(/-/g, '_')
     const extraTypes = input.types.slice(1).map(t => t.replace(/-/g, '_')).join(', ')
+    // Send bare hosts (no scheme/path) so the model doesn't echo URLs into
+    // domain/port tools, and spell out the formatting rules explicitly.
+    const cleanTargets = input.targets.split('\n').map(s => s.trim()).filter(Boolean)
+      .map(s => normalizeTarget(s).host).join('\n')
+    const targetRules = 'Target formatting rules the plan MUST follow: for DNS/OSINT/port tools '
+      + '(theHarvester, subfinder, amass, whois, dig, dnsx, nmap, rustscan) use the BARE domain or IP '
+      + '— no scheme, no path, no trailing slash; for web tools (ffuf, nuclei, sqlmap, httpx) use a single '
+      + 'clean URL like https://host. Never emit http://https://, never append /24 to a hostname (only to a '
+      + 'bare IP), and on Kali call the ProjectDiscovery HTTP prober as httpx-toolkit (httpx is the Python lib).'
     // Fold the uploaded scope document into additional_context so the current
     // gateway (which already injects additional_context into the Gemini prompt)
     // plans from the real document; also send scope_document for forward-compat.
@@ -365,11 +406,11 @@ export default function ScopeAnalyzerPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           engagement_type,
-          targets: input.targets,
+          targets: cleanTargets || input.targets,
           objectives: input.objectives,
           restrictions: input.restrictions,
           scope_document: scopeDoc?.text || '',
-          additional_context: `Available timeframe: ${input.timeframe}` + (extraTypes ? `. Additional engagement types: ${extraTypes}` : '') + scopeBlock,
+          additional_context: `Available timeframe: ${input.timeframe}` + (extraTypes ? `. Additional engagement types: ${extraTypes}` : '') + `. ${targetRules}` + scopeBlock,
         }),
       })
       const json = await res.json().catch(() => ({}))
