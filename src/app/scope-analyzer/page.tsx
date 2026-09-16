@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { Navbar } from '@/components/Navbar'
 
-type EngagementType = 'web-app' | 'network' | 'active-directory' | 'mobile' | 'api-cloud' | 'red-team' | 'physical' | 'ddos'
+type EngagementType = 'web-app' | 'network' | 'active-directory' | 'mobile' | 'api-cloud' | 'red-team' | 'physical'
 type Timeframe = '1 day' | '3 days' | '1 week' | '2 weeks' | '1 month'
 
 interface EngagementInput {
@@ -72,7 +72,6 @@ function generatePlan(input: EngagementInput): EngagementPlan {
   const isWeb = input.types.includes('web-app') || input.types.includes('api-cloud')
   const isNetwork = input.types.includes('network') || input.types.includes('red-team')
   const isMobile = input.types.includes('mobile')
-  const isDDoS = input.types.includes('ddos')
 
   phases.push({
     name: 'Phase 1 — Passive Reconnaissance',
@@ -241,46 +240,6 @@ function generatePlan(input: EngagementInput): EngagementPlan {
     })
   }
 
-  if (isDDoS) {
-    const _nt = normalizeTarget(targets[0] || '<target>')
-    const _h = _nt.host
-    const _u = _nt.url
-    phases.push({
-      name: 'Phase — DDoS / DoS Assessment',
-      priority: 'high',
-      tools: ['hping3','nmap-dos','slowhttptest','testssl.sh','ab','wrk','siege'],
-      commands: [
-        '# PASSIVE — safe, no flooding',
-        `curl -sI https://${_h} | grep -iE 'cf-ray|server|x-cache|via|x-waf|x-ddos'`,
-        `dig ${_h} +short`,
-        `mtr --report --report-cycles 5 ${_h}`,
-        `whois $(dig +short ${_h} | head -1)`,
-        `shodan host $(dig +short ${_h} | head -1)`,
-        `nmap -sV --script dos ${_h} -p 80,443,8080 -oN ddos-vulnscan.txt`,
-        `nmap -sV --script http-slowloris-check ${_h} -p 80,443`,
-        `testssl.sh --severity HIGH ${_u}`,
-        `nmap -sV --script ssl-heartbleed ${_h} -p 443`,
-        `nmap -sU -p 19,53,111,123,161,389,1900,3702 ${_h} --open`,
-        `dig ${_h} ANY @${_h}`,
-        `nmap -sU -p 123 --script ntp-monlist ${_h}`,
-        `ab -n 10 -c 1 ${_u}/`,
-        `siege --benchmark -r 1 ${_u}/`,
-        `nikto -host ${_h} -Tuning 6`,
-        '# ACTIVE — lab + explicit written authorization only',
-        `slowhttptest -c 500 -H -g -o slowloris_report -i 10 -r 200 -t GET -u ${_u}/ -x 24 -p 3`,
-        `slowhttptest -c 500 -B -g -o rudy_report -i 110 -r 200 -t POST -u ${_u}/ -x 24 -p 3`,
-        `slowhttptest -c 500 -X -g -o slowread_report -r 200 -u ${_u}/ -x 24 -p 3 -k 3`,
-        `ab -n 10000 -c 100 ${_u}/`,
-        `siege -c 50 -t 60s ${_u}/`,
-        `wrk -t12 -c400 -d30s ${_u}/`,
-        `sudo hping3 --flood --syn -V -p 80 ${_h}`,
-        `sudo hping3 --udp --flood -p 53 ${_h}`,
-      ],
-      notes: 'Passive: safe for any authorized target. Active: written auth + lab only.'
-        + (input.restrictions ? ' | ' + input.restrictions : ''),
-    })
-  }
-
   phases.push({
     name: 'Final Phase — Cleanup & Report',
     priority: 'high',
@@ -309,7 +268,7 @@ function generatePlan(input: EngagementInput): EngagementPlan {
 
   const engagementLabels: Record<EngagementType, string> = {
     'web-app': 'Web App', 'network': 'Network/Infra', 'active-directory': 'Active Directory',
-    'mobile': 'Mobile', 'api-cloud': 'API/Cloud', 'red-team': 'Red Team', 'physical': 'Physical', 'ddos': 'DDoS/DoS',
+    'mobile': 'Mobile', 'api-cloud': 'API/Cloud', 'red-team': 'Red Team', 'physical': 'Physical',
   }
 
   return {
@@ -480,7 +439,6 @@ export default function ScopeAnalyzerPage() {
     { id: 'api-cloud', label: 'API / Cloud', icon: '☁️' },
     { id: 'red-team', label: 'Red Team', icon: '🎯' },
     { id: 'physical', label: 'Physical', icon: '🚪' },
-    { id: 'ddos', label: 'DDoS / DoS', icon: '⚡' },
   ]
 
   return (
