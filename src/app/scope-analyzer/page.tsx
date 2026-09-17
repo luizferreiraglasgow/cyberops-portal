@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { Navbar } from '@/components/Navbar'
 
-type EngagementType = 'web-app' | 'network' | 'active-directory' | 'mobile' | 'api-cloud' | 'red-team' | 'physical' | 'ddos'
+type EngagementType = 'web-app' | 'network' | 'active-directory' | 'mobile' | 'api-cloud' | 'red-team' | 'physical' | 'ddos' | 'social'
 type Timeframe = '1 day' | '3 days' | '1 week' | '2 weeks' | '1 month'
 
 interface EngagementInput {
@@ -309,7 +309,7 @@ function generatePlan(input: EngagementInput): EngagementPlan {
 
   const engagementLabels: Record<EngagementType, string> = {
     'web-app': 'Web App', 'network': 'Network/Infra', 'active-directory': 'Active Directory',
-    'mobile': 'Mobile', 'api-cloud': 'API/Cloud', 'red-team': 'Red Team', 'physical': 'Physical', 'ddos': 'DDoS/DoS',
+    'mobile': 'Mobile', 'api-cloud': 'API/Cloud', 'red-team': 'Red Team', 'physical': 'Physical', 'ddos': 'DDoS/DoS', 'social': 'Social Engineering',
   }
 
   return {
@@ -372,6 +372,11 @@ export default function ScopeAnalyzerPage() {
   const [scopeDoc, setScopeDoc] = useState<{ name: string; text: string; chars: number; truncated?: boolean } | null>(null)
   const [scopeDocError, setScopeDocError] = useState<string | null>(null)
   const [scopeDocLoading, setScopeDocLoading] = useState(false)
+  // Social Engineering (R1 clean panel — client-side config only; no backend yet)
+  const [seProfile, setSeProfile] = useState<'awareness' | 'blackbox' | 'adversary'>('awareness')
+  const [seEmail, setSeEmail] = useState(true)
+  const [seSms, setSeSms] = useState(false)
+  const [seAdvanced, setSeAdvanced] = useState(false)
 
   useEffect(() => { if (status === 'unauthenticated') router.push('/login') }, [status, router])
 
@@ -379,12 +384,22 @@ export default function ScopeAnalyzerPage() {
   if (!session) return null
 
   function toggleType(t: EngagementType) {
-    setInput(prev => ({ ...prev, types: prev.types.includes(t) ? prev.types.filter(x => x !== t) : [...prev.types, t] }))
+    setInput(prev => {
+      // 'social' is an exclusive engagement type — it opens a Campaign Workspace, not a command plan.
+      if (t === 'social') {
+        const solo = prev.types.length === 1 && prev.types[0] === 'social'
+        return { ...prev, types: solo ? ['web-app'] : ['social'] }
+      }
+      const base = prev.types.filter(x => x !== 'social')
+      const next = base.includes(t) ? base.filter(x => x !== t) : [...base, t]
+      return { ...prev, types: next.length ? next : ['web-app'] }
+    })
     setPlan(null)
   }
 
   function analyze() {
     if (!input.targets.trim()) return
+    if (input.types.includes('social')) return  // social uses the Campaign Workspace, not generatePlan()
     setPlan(generatePlan(input))
   }
 
@@ -423,6 +438,7 @@ export default function ScopeAnalyzerPage() {
 
   async function analyzeAI() {
     if (!input.targets.trim()) return
+    if (input.types.includes('social')) return  // social uses the Campaign Workspace
     setAiLoading(true); setAiPlan(null); setAiError(null); setAiBackend(null); setAiModel(null); setAiNotice(null)
     const engagement_type = (input.types[0] || 'web-app').replace(/-/g, '_')
     const extraTypes = input.types.slice(1).map(t => t.replace(/-/g, '_')).join(', ')
@@ -481,6 +497,13 @@ export default function ScopeAnalyzerPage() {
     { id: 'red-team', label: 'Red Team', icon: '🎯' },
     { id: 'physical', label: 'Physical', icon: '🚪' },
     { id: 'ddos', label: 'DDoS / DoS', icon: '⚡' },
+    { id: 'social', label: 'Social Engineering', icon: '🎣' },
+  ]
+  const isSocial = input.types.includes('social')
+  const seProfiles: { id: 'awareness' | 'blackbox' | 'adversary'; label: string; caps: string[] }[] = [
+    { id: 'awareness', label: 'Awareness', caps: ['Email', 'SMS', 'Reporting telemetry'] },
+    { id: 'blackbox', label: 'Black-Box', caps: ['+ OSINT enrichment', '+ Target segmentation', '+ Scenario chaining'] },
+    { id: 'adversary', label: 'Adversary Simulation', caps: ['+ Advanced identity interaction', 'needs Zone B feed + separate sign-off'] },
   ]
 
   return (
@@ -549,10 +572,68 @@ export default function ScopeAnalyzerPage() {
                 ))}
               </select>
             </div>
+            {isSocial ? (
+              <div role="note" style={{ padding: '12px', border: '1px solid #14b8a6', background: '#14b8a622', borderRadius: 8, color: '#5eead4', fontFamily: 'monospace', fontSize: '0.78rem', lineHeight: 1.5 }}>
+                🎣 Social Engineering opens a <strong>Campaign Workspace</strong> — configure the profile, channels and telemetry in the panel on the right, then Build.
+              </div>
+            ) : (<>
             <button className="cyber-btn w-full" onClick={analyze} disabled={!input.targets.trim()} style={{ padding: '12px', fontSize: '0.9rem' }}>⚡ Analyze Scope & Generate Plan</button>
             <button onClick={analyzeAI} disabled={!input.targets.trim() || aiLoading} style={{ width: '100%', marginTop: 10, padding: '11px', fontSize: '0.85rem', fontFamily: 'monospace', borderRadius: 8, cursor: input.targets.trim() && !aiLoading ? 'pointer' : 'not-allowed', background: 'transparent', border: '1px solid #8b5cf6', color: '#c4b5fd' }}>{aiLoading ? '✨ Generating with Gemini…' : '✨ Generate with Gemini (AI)'}</button>
+            </>)}
           </div>
           <div>
+            {isSocial ? (
+              <div className="cyber-card p-6" style={{ borderColor: '#14b8a6' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                  <span style={{ fontSize: '1.2rem' }}>🎣</span>
+                  <h2 style={{ color: '#5eead4', fontFamily: 'monospace', fontSize: '0.85rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>Social Engineering — Human Attack Simulation</h2>
+                </div>
+                <p style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.72rem', lineHeight: 1.6, margin: '0 0 18px' }}>Configure the campaign, then open the Campaign Workspace. Provider-owned simulation — attempt-only telemetry, no credential capture.</p>
+                <fieldset style={{ border: 'none', padding: 0, margin: '0 0 18px' }}>
+                  <legend style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.72rem', marginBottom: 8, padding: 0 }}>Profile</legend>
+                  <div role="group" aria-label="Campaign profile" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {seProfiles.map(p => (
+                      <button key={p.id} type="button" aria-pressed={seProfile === p.id} onClick={() => setSeProfile(p.id)}
+                        style={{ background: seProfile === p.id ? '#14b8a622' : 'transparent', border: `1px solid ${seProfile === p.id ? '#14b8a6' : '#1e3a5f'}`, color: seProfile === p.id ? '#5eead4' : '#64748b', borderRadius: 6, padding: '5px 12px', fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'monospace' }}>
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                  <ul style={{ listStyle: 'none', padding: 0, margin: '10px 0 0' }}>
+                    {(seProfiles.find(p => p.id === seProfile)?.caps ?? []).map((c, i) => (
+                      <li key={i} style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: '0.72rem', lineHeight: 1.9 }}>▸ {c}</li>
+                    ))}
+                  </ul>
+                </fieldset>
+                <div style={{ marginBottom: 18 }}>
+                  <div style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.72rem', marginBottom: 8 }}>Channels</div>
+                  <div role="group" aria-label="Delivery channels" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    <button type="button" aria-pressed={seEmail} onClick={() => setSeEmail(v => !v)}
+                      style={{ background: seEmail ? '#14b8a622' : 'transparent', border: `1px solid ${seEmail ? '#14b8a6' : '#1e3a5f'}`, color: seEmail ? '#5eead4' : '#64748b', borderRadius: 6, padding: '5px 12px', fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'monospace' }}>{seEmail ? '☑' : '☐'} Email</button>
+                    <button type="button" aria-pressed={seSms} onClick={() => setSeSms(v => !v)}
+                      style={{ background: seSms ? '#14b8a622' : 'transparent', border: `1px solid ${seSms ? '#14b8a6' : '#1e3a5f'}`, color: seSms ? '#5eead4' : '#64748b', borderRadius: 6, padding: '5px 12px', fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'monospace' }}>{seSms ? '☑' : '☐'} SMS</button>
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <button type="button" aria-pressed={seAdvanced} onClick={() => setSeAdvanced(v => !v)}
+                      style={{ background: 'transparent', border: `1px solid ${seAdvanced ? '#f59e0b' : '#1e3a5f'}`, color: seAdvanced ? '#fcd34d' : '#475569', borderRadius: 6, padding: '4px 10px', fontSize: '0.7rem', cursor: 'pointer', fontFamily: 'monospace' }}>{seAdvanced ? '🔓' : '🔒'} Vishing / Impersonation</button>
+                    <div style={{ color: seAdvanced ? '#f59e0b' : '#475569', fontFamily: 'monospace', fontSize: '0.68rem', marginTop: 6, lineHeight: 1.5 }}>
+                      {seAdvanced ? '⚠ Higher human & legal risk — requires separate written sign-off before use.' : 'Locked — higher-risk channels stay behind a separate sign-off.'}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ marginBottom: 18 }}>
+                  <div style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.72rem', marginBottom: 8 }}>Telemetry</div>
+                  <div style={{ color: '#5eead4', fontFamily: 'monospace', fontSize: '0.72rem', lineHeight: 1.9 }}>✓ Zone A — Human layer (provider-owned, always on)</div>
+                  <div style={{ color: '#475569', fontFamily: 'monospace', fontSize: '0.72rem', lineHeight: 1.9 }}>○ Zone B — Defensive layer (client tenant · not connected)</div>
+                  <div style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.68rem', marginTop: 6, lineHeight: 1.5 }}>Records arrival · interaction · simulated submission · report events. Never passwords, secrets or reusable credentials.</div>
+                </div>
+                <button type="button" disabled aria-disabled="true"
+                  style={{ width: '100%', padding: '12px', fontSize: '0.85rem', fontFamily: 'monospace', borderRadius: 8, background: 'transparent', border: '1px dashed #14b8a6', color: '#5eead4', cursor: 'not-allowed', opacity: 0.6 }}>
+                  🚀 Build Campaign
+                </button>
+                <p style={{ color: '#475569', fontFamily: 'monospace', fontSize: '0.68rem', textAlign: 'center', margin: '8px 0 0' }}>Campaign Workspace arrives in the next build slice.</p>
+              </div>
+            ) : (<>
             {(aiLoading || aiPlan || aiError) && (() => {
               const isOllama = !!aiBackend && /ollama/i.test(aiBackend)
               const accent = aiError ? '#ff6b6b' : isOllama ? '#f59e0b' : '#8b5cf6'
@@ -620,6 +701,7 @@ export default function ScopeAnalyzerPage() {
                 </div>
               </div>
             )}
+            </>)}
           </div>
         </div>
       </main>
