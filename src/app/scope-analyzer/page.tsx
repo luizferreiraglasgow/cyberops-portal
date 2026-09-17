@@ -627,11 +627,11 @@ export default function ScopeAnalyzerPage() {
                   <div style={{ color: '#475569', fontFamily: 'monospace', fontSize: '0.72rem', lineHeight: 1.9 }}>○ Zone B — Defensive layer (client tenant · not connected)</div>
                   <div style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.68rem', marginTop: 6, lineHeight: 1.5 }}>Records arrival · interaction · simulated submission · report events. Never passwords, secrets or reusable credentials.</div>
                 </div>
-                <button type="button" disabled aria-disabled="true"
-                  style={{ width: '100%', padding: '12px', fontSize: '0.85rem', fontFamily: 'monospace', borderRadius: 8, background: 'transparent', border: '1px dashed #14b8a6', color: '#5eead4', cursor: 'not-allowed', opacity: 0.6 }}>
+                <button type="button" onClick={() => router.push('/campaigns/new')}
+                  style={{ width: '100%', padding: '12px', fontSize: '0.85rem', fontFamily: 'monospace', borderRadius: 8, background: '#14b8a622', border: '1px solid #14b8a6', color: '#5eead4', cursor: 'pointer' }}>
                   🚀 Build Campaign
                 </button>
-                <p style={{ color: '#475569', fontFamily: 'monospace', fontSize: '0.68rem', textAlign: 'center', margin: '8px 0 0' }}>Campaign Workspace arrives in the next build slice.</p>
+                <p style={{ color: '#475569', fontFamily: 'monospace', fontSize: '0.68rem', textAlign: 'center', margin: '8px 0 0' }}>Opens the Campaign Builder — creates a DRAFT campaign.</p>
               </div>
             ) : (<>
             {(aiLoading || aiPlan || aiError) && (() => {
