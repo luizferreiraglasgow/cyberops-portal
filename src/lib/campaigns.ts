@@ -344,3 +344,36 @@ export async function listEvents(
   if (!r.ok) return r
   return { ok: true, data: Array.isArray(r.data) ? r.data : [] }
 }
+
+// S5 — Evidence Pack Builder
+export interface EvidencePack {
+  campaign_id: string
+  campaign_name: string
+  client_id: string
+  engagement_id: string
+  authorization_ref: string
+  scorecard: { targets_total: number; targets_reached: number; simulated_submissions: number; reports: number; kill_switch_triggered: boolean }
+  timeline: Array<{ timestamp: string; event_type: string; target_id?: string; source: string }>
+}
+
+export async function buildEvidencePack(campaignId: string): Promise<EvidencePack | { error: string }> {
+  const campaignRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/public.campaign?id=eq.${campaignId}`, {
+    headers: { Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`, apikey: process.env.SUPABASE_SERVICE_ROLE_KEY || '' }
+  })
+  const campaigns = await campaignRes.json()
+  if (!campaigns?.[0]) return { error: 'Campaign not found' }
+  const campaign = campaigns[0]
+  const eventsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/public.event?campaign_id=eq.${campaignId}&order=timestamp.asc`, {
+    headers: { Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`, apikey: process.env.SUPABASE_SERVICE_ROLE_KEY || '' }
+  })
+  const events = await eventsRes.json()
+  const arrivals = events.filter((e: Record<string, unknown>) => e.event_type === 'arrival')
+  const submissions = events.filter((e: Record<string, unknown>) => e.event_type === 'simulated_submission')
+  const reports = events.filter((e: Record<string, unknown>) => e.event_type === 'report')
+  const targetsReached = new Set(arrivals.map((e: Record<string, unknown>) => e.target_id))
+  return {
+    campaign_id: campaign.id, campaign_name: campaign.name, client_id: campaign.client_id, engagement_id: campaign.engagement_id, authorization_ref: campaign.authorization_ref,
+    scorecard: { targets_total: campaign.targets?.length || 0, targets_reached: targetsReached.size, simulated_submissions: submissions.length, reports: reports.length, kill_switch_triggered: reports.length >= (campaign.kill_switch?.report_threshold || 999) },
+    timeline: events.map((e: Record<string, unknown>) => ({ timestamp: e.timestamp as string, event_type: e.event_type as string, target_id: e.target_id as string | undefined, source: e.source as string }))
+  }
+}
