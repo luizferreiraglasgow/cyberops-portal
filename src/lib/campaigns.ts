@@ -111,6 +111,7 @@ export type EventType =
 export interface TargetRow {
   id: string; campaign_id: string; group_id: string; target_id: string
   role: string | null; department: string | null; channel: 'email' | 'sms' | null
+  email: string | null
 }
 
 export interface ScenarioRow {
@@ -232,7 +233,7 @@ export async function addTargets(
 
 export async function listTargets(campaignId: string): Promise<SupabaseResult<TargetRow[]>> {
   const r = await supabaseRest<TargetRow[]>(
-    `/target?campaign_id=eq.${encodeURIComponent(campaignId)}&select=id,campaign_id,group_id,target_id,role,department,channel&order=created_at.asc`,
+    `/target?campaign_id=eq.${encodeURIComponent(campaignId)}&select=id,campaign_id,group_id,target_id,role,department,channel,email&order=created_at.asc`,
   )
   if (!r.ok) return r
   return { ok: true, data: Array.isArray(r.data) ? r.data : [] }
