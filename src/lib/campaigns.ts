@@ -377,3 +377,17 @@ export async function buildEvidencePack(campaignId: string): Promise<EvidencePac
     timeline: events.map((e: Record<string, unknown>) => ({ timestamp: e.timestamp as string, event_type: e.event_type as string, target_id: e.target_id as string | undefined, source: e.source as string }))
   }
 }
+
+// R2.2 - runner writes gophish_campaign_id back after creating GoPhish campaign.
+// Whitelisted PATCH from the portal API, service_role bypasses RLS.
+export async function updateCampaign(
+  id: string,
+  updates: Record<string, unknown>,
+): Promise<SupabaseResult<Campaign | null>> {
+  const r = await supabaseRest<Campaign[]>(
+    `/campaign?id=eq.${encodeURIComponent(id)}`,
+    { method: 'PATCH', prefer: 'return=representation', body: JSON.stringify(updates) },
+  )
+  if (!r.ok) return r
+  return { ok: true, data: (Array.isArray(r.data) ? r.data[0] : null) ?? null }
+}
