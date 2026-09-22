@@ -58,6 +58,20 @@ const redTeamTools: Tool[] = [
     badge: "Dashboard",
     external: false,
   },
+  {
+    name: "GoPhish",
+    description: "Phishing simulation platform",
+    url: "https://192.168.0.66:8333",
+    badge: "node-02 :8333",
+    external: false,
+  },
+  {
+    name: "Ollama Pentest",
+    description: "Pentest-tuned LLM inference (qwen3.5:9b-Pentest)",
+    url: "http://192.168.0.64:3000",
+    badge: "node-03 :3000",
+    external: false,
+  },
 ];
 
 const blueTeamTools: Tool[] = [
