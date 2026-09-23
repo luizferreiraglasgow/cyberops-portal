@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authorizeCampaignCall } from '@/lib/campaignAuth'
-import { getCampaign, updateCampaign } from '@/lib/campaigns'
+import { getCampaign, updateCampaign, listScenarios } from '@/lib/campaigns'
 import { supabaseErrorResponse } from '@/lib/supabase'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -13,7 +13,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const r = await getCampaign(params.id)
   if (!r.ok) return supabaseErrorResponse(r)
   if (!r.data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  return NextResponse.json({ campaign: r.data })
+  // R2.4 - additive: expose the latest scenario type so the runner can pick the right
+  // GoPhish template/page per scenario. Non-fatal if this lookup fails.
+  let scenario_type: string | null = null
+  try {
+    const sc = await listScenarios(params.id)
+    if (sc.ok && sc.data && sc.data.length > 0) scenario_type = sc.data[sc.data.length - 1].type
+  } catch {}
+  return NextResponse.json({ campaign: { ...r.data, scenario_type } })
 }
 
 // R2.2 - narrow PATCH: only gophish_campaign_id is accepted for now.

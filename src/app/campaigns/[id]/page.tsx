@@ -77,7 +77,7 @@ export default function CampaignWorkspacePage() {
   const [bulkText, setBulkText] = useState('')
 
   // Scenario form
-  const [scType, setScType] = useState('supplier-invoice')
+  const [scType, setScType] = useState('m365-alert')
   const [scChannel, setScChannel] = useState<'email' | 'sms'>('email')
   const [scDifficulty, setScDifficulty] = useState<'least' | 'moderate' | 'most'>('moderate')
   const [scVariant, setScVariant] = useState('A')
@@ -260,7 +260,7 @@ export default function CampaignWorkspacePage() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                     <div>
                       <label style={labelSm}>Type</label>
-                      <input value={scType} onChange={e => setScType(e.target.value)} className="cyber-input" style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.75rem' }} />
+                      <select value={scType} onChange={e => setScType(e.target.value)} className="cyber-input" style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.75rem' }}><option value="m365-alert">M365 Alert</option><option value="password-expiry">Password Expiry</option><option value="shared-document">Shared Document</option><option value="activity-detected">Activity Detected</option><option value="it-support">IT Support</option><option value="account-locked">Account Locked</option></select>
                     </div>
                     <div>
                       <label style={labelSm}>Channel</label>
