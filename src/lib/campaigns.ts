@@ -178,7 +178,7 @@ export async function setKillSwitch(
 // ── Targets ────────────────────────────────────────────────────────────
 export interface NewTargetInput {
   target_id: string; role?: string | null; department?: string | null
-  channel?: 'email' | 'sms' | null
+  channel?: 'email' | 'sms' | null; email?: string | null
 }
 
 function normaliseTargets(raw: unknown): { error: string } | { value: NewTargetInput[] } {
@@ -194,11 +194,13 @@ function normaliseTargets(raw: unknown): { error: string } | { value: NewTargetI
     if (seen.has(target_id)) return { error: `duplicate target_id: ${target_id}` }
     seen.add(target_id)
     const channel = o.channel === 'email' || o.channel === 'sms' ? o.channel : null
+    const email = typeof o.email === 'string' ? o.email.trim() : null
     out.push({
       target_id,
       role: typeof o.role === 'string' ? o.role : null,
       department: typeof o.department === 'string' ? o.department : null,
       channel,
+      email,
     })
   }
   return { value: out }
