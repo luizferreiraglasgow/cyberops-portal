@@ -144,10 +144,11 @@ export default function CampaignWorkspacePage() {
     const rows: unknown[] = []
     for (const line of lines) {
       const parts = line.split(',').map(p => p.trim())
-      const [target_id, role, department, ch] = parts
+      const [target_id, role, department, ch, contact] = parts
       if (!target_id) return { error: 'Each row needs a pseudonymous target_id.' }
-      const channel = ch === 'email' || ch === 'sms' ? ch : null
-      rows.push({ target_id, role: role || null, department: department || null, channel })
+      let channel = ch === 'email' || ch === 'sms' ? ch : null
+      let email = contact || null; if (channel === null && ch) { email = ch; channel = ch.indexOf('@') >= 0 ? 'email' : 'sms' }
+      rows.push({ target_id, role: role || null, department: department || null, channel, email })
     }
     return { targets: rows }
   }
