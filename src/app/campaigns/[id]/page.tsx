@@ -70,6 +70,13 @@ export default function CampaignWorkspacePage() {
   const [events, setEvents] = useState<EventRow[]>([])
   const [error, setError] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
+  const [deliveryProvider, setDeliveryProvider] = useState<{ value: string; updated_at: string } | null>(null)
+  useEffect(() => {
+    fetch('/api/system/status', { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => setDeliveryProvider(j?.status ?? null))
+      .catch(() => {})
+  }, [])
   const [busy, setBusy] = useState(false)
 
   // Targets form
@@ -171,7 +178,17 @@ export default function CampaignWorkspacePage() {
           {campaign && (
             <span style={{ background: `${sc}22`, border: `1px solid ${sc}`, color: sc, borderRadius: 4, padding: '2px 10px', fontSize: '0.7rem', fontFamily: 'monospace', fontWeight: 700 }}>{campaign.status}</span>
           )}
-          <span style={{ marginLeft: 'auto', color: '#475569', fontFamily: 'monospace', fontSize: '0.68rem' }}>{busy ? '⚙ working…' : '● live'}</span>
+          {deliveryProvider && (
+            <span title={`Reported by ${deliveryProvider.reported_by ?? 'runner'} at ${deliveryProvider.updated_at}`} style={{
+              background: deliveryProvider.value === 'simulation' ? '#14b8a622' : '#7f1d1d33',
+              border: `1px solid ${deliveryProvider.value === 'simulation' ? '#14b8a6' : '#ef4444'}`,
+              color: deliveryProvider.value === 'simulation' ? '#5eead4' : '#fecaca',
+              borderRadius: 4, padding: '2px 10px', fontSize: '0.68rem', fontFamily: 'monospace', fontWeight: 700,
+            }}>
+              Delivery: {deliveryProvider.value === 'simulation' ? 'SIMULATION' : `LIVE (${deliveryProvider.value})`}
+            </span>
+          )}
+          <span style={{ marginLeft: deliveryProvider ? 8 : 'auto', color: '#475569', fontFamily: 'monospace', fontSize: '0.68rem' }}>{busy ? '⚙ working…' : '● live'}</span>
         </div>
 
         {error && <div role="alert" className="cyber-card p-4 mb-3" style={{ color: '#ff6b6b', fontFamily: 'monospace', fontSize: '0.78rem', borderColor: '#7f1d1d' }}>{error}</div>}
@@ -211,9 +228,11 @@ export default function CampaignWorkspacePage() {
                       `Start live delivery for this campaign?\n\n` +
                       `Active channel(s): ${activeChannels}\n` +
                       `Targets: ${targets.length}\n\n` +
-                      `Delivery provider (simulation vs real GoPhish send) is controlled ` +
-                      `outside the portal and is not shown here yet — confirm with your ` +
-                      `team lead before proceeding if you are unsure which mode is live.\n\n` +
+                      (deliveryProvider
+                        ? `Delivery provider is currently: ${deliveryProvider.value.toUpperCase()}` +
+                          (deliveryProvider.value !== 'simulation' ? ' — THIS WILL SEND A REAL MESSAGE.\n\n' : '.\n\n')
+                        : `Delivery provider status is unknown (could not reach status check) — ` +
+                          `confirm with your team lead before proceeding.\n\n`) +
                       `Proceed?`
                     )
                     if (!ok) return
