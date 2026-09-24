@@ -204,7 +204,22 @@ export default function CampaignWorkspacePage() {
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {nextButtons.length === 0 && <div style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.75rem' }}>Terminal state — no further transitions.</div>}
                 {nextButtons.map(b => (
-                  <button key={b.to} onClick={() => api('/transition', { to: b.to }, `Transitioned to ${b.to}`)} disabled={busy}
+                  <button key={b.to} onClick={() => {
+                  if (b.to === 'RUNNING') {
+                    const activeChannels = Array.from(new Set(scenarios.map(s => s.channel))).join(', ') || 'none configured'
+                    const ok = window.confirm(
+                      `Start live delivery for this campaign?\n\n` +
+                      `Active channel(s): ${activeChannels}\n` +
+                      `Targets: ${targets.length}\n\n` +
+                      `Delivery provider (simulation vs real GoPhish send) is controlled ` +
+                      `outside the portal and is not shown here yet — confirm with your ` +
+                      `team lead before proceeding if you are unsure which mode is live.\n\n` +
+                      `Proceed?`
+                    )
+                    if (!ok) return
+                  }
+                  api('/transition', { to: b.to }, `Transitioned to ${b.to}`)
+                }} disabled={busy}
                     style={{ background: b.danger ? '#7f1d1d33' : '#14b8a622', border: `1px solid ${b.danger ? '#ef4444' : '#14b8a6'}`, color: b.danger ? '#fecaca' : '#5eead4', borderRadius: 6, padding: '6px 14px', fontSize: '0.78rem', cursor: busy ? 'not-allowed' : 'pointer', fontFamily: 'monospace', opacity: busy ? 0.6 : 1 }}>
                     {b.label} → {b.to}
                   </button>
