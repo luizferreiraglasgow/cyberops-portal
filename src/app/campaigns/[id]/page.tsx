@@ -70,7 +70,7 @@ export default function CampaignWorkspacePage() {
   const [events, setEvents] = useState<EventRow[]>([])
   const [error, setError] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
-  const [deliveryProvider, setDeliveryProvider] = useState<{ value: string; updated_at: string } | null>(null)
+  const [deliveryProvider, setDeliveryProvider] = useState<{ value: string; updated_at: string; reported_by: string | null } | null>(null)
   useEffect(() => {
     fetch('/api/system/status', { cache: 'no-store' })
       .then(r => (r.ok ? r.json() : null))
