@@ -22,6 +22,7 @@ interface Campaign {
   start_time: string | null
   end_time: string | null
   created_at: string
+  gophish_campaign_id: number | null
 }
 interface TargetRow { id: string; target_id: string; role: string | null; department: string | null; channel: 'email' | 'sms' | null; email: string | null }
 interface ScenarioRow { id: string; type: string; channel: string; difficulty: string; variant: string | null }
@@ -205,6 +206,7 @@ export default function CampaignWorkspacePage() {
               <Row k="Created" v={new Date(campaign.created_at).toLocaleString()} />
               {campaign.start_time && <Row k="Started" v={new Date(campaign.start_time).toLocaleString()} />}
               {campaign.end_time && <Row k="Ended" v={new Date(campaign.end_time).toLocaleString()} />}
+              {campaign.gophish_campaign_id != null && <Row k="GoPhish campaign" v={`#${campaign.gophish_campaign_id}`} />}
             </div>
 
             <div className="cyber-card p-5">
