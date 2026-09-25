@@ -181,7 +181,7 @@ export interface NewTargetInput {
   channel?: 'email' | 'sms' | null; email?: string | null
 }
 
-function normaliseTargets(raw: unknown): { error: string } | { value: NewTargetInput[] } {
+export function normaliseTargets(raw: unknown): { error: string } | { value: NewTargetInput[] } {
   if (!Array.isArray(raw)) return { error: 'targets must be an array' }
   if (raw.length === 0 || raw.length > 500) return { error: 'targets: 1..500 entries' }
   const seen = new Set<string>()
