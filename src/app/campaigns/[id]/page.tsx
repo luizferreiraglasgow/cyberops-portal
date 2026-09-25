@@ -23,7 +23,7 @@ interface Campaign {
   end_time: string | null
   created_at: string
 }
-interface TargetRow { id: string; target_id: string; role: string | null; department: string | null; channel: 'email' | 'sms' | null }
+interface TargetRow { id: string; target_id: string; role: string | null; department: string | null; channel: 'email' | 'sms' | null; email: string | null }
 interface ScenarioRow { id: string; type: string; channel: string; difficulty: string; variant: string | null }
 interface EventRow { id: string; target_id: string; event_type: string; zone: string; source: string | null; occurred_at: string }
 
@@ -256,6 +256,12 @@ export default function CampaignWorkspacePage() {
                   {targets.slice(0, 20).map(t => (
                     <div key={t.id} style={{ fontFamily: 'monospace', fontSize: '0.68rem', color: '#94a3b8', padding: '2px 0' }}>
                       <span style={{ color: '#5eead4' }}>{t.target_id}</span>{t.role ? ` · ${t.role}` : ''}{t.department ? ` · ${t.department}` : ''}{t.channel ? ` · ${t.channel}` : ''}
+                    {t.email && <span style={{ color: '#94a3b8' }}> · {t.email}</span>}
+                    {t.channel === 'email' && !t.email && (
+                      <span style={{ marginLeft: 6, background: '#7f1d1d33', border: '1px solid #ef4444', color: '#fecaca', borderRadius: 4, padding: '1px 6px', fontSize: '0.62rem', fontFamily: 'monospace', fontWeight: 700 }}>
+                        ⚠ missing email
+                      </span>
+                    )}
                     </div>
                   ))}
                   {targets.length > 20 && <div style={{ color: '#475569', fontFamily: 'monospace', fontSize: '0.68rem', paddingTop: 4 }}>+ {targets.length - 20} more…</div>}
